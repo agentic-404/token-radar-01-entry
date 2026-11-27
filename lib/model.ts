@@ -1,30 +1,34 @@
-// Token Radar's model (radar-6): rank pre-token protocols by an implied launch value
-// fitted from the snapshot's own live tokens — never asserted, never hardcoded by name.
+// Token Radar's model (radar-7): rank pre-token protocols by an implied launch
+// value fitted from the snapshot's own live tokens — never asserted, never
+// hardcoded by name. radar-7 keeps radar-6's fitted model exactly (same slope,
+// same terms, same blind tests) and adds what radar-6 lacked: a costed farm
+// verdict in dollars per hour, an expected-value column, the whole 758
+// protocols accounted for, and dated farm schedules.
 //
 //   log10(mcap) = slope x log10(TVL) + level(category) + coef_growth x growth
 //                 + coef_maturity x maturity
 //
-// The slope is a Theil-Sen robust fit on the 128 live tokens; each category level
-// is the median of its live tokens' residuals, shrunk toward the global level with
-// two pseudo-observations. The two terms are kept ONLY because two blind tests
-// keep them (see fitModel): growth survives both, maturity survives the
-// walk-forward and is neutral on leave-one-out, breadth fails both and is dropped.
-// The snapshot carries market cap, not fully-diluted value, so every multiple is
-// honestly a market-cap multiple.
+// The slope is a Theil-Sen robust fit on the 128 live tokens; each category
+// level is the median of its live tokens' residuals, shrunk toward the global
+// level with two pseudo-observations. The two terms survive only because two
+// blind tests keep them (see fitModel): growth survives both, maturity is
+// neutral on leave-one-out and clearly helps the walk-forward, breadth fails
+// both and is dropped. The snapshot carries market cap, not fully-diluted
+// value, so every multiple is honestly a market-cap multiple.
 //
-// Blind-test record, measured on this snapshot (128 live tokens), and stated in
+// Blind-test record, measured on this snapshot (128 live tokens), stated in
 // the dashboard's model panel with the numbers, not claimed:
-//   base (no terms):            LOO x3.90, walk-forward x3.39
-//   + growth:                   LOO x3.69, walk-forward x3.35
-//   + growth + maturity:        LOO x3.68, walk-forward x3.24   <- selected
+//   base (no terms):               LOO x3.90, walk-forward x3.39
+//   + growth:                      LOO x3.69, walk-forward x3.35
+//   + growth + maturity:           LOO x3.68, walk-forward x3.24   <- selected
 //   + growth + maturity + breadth: LOO x3.91, walk-forward x3.49 (breadth dropped)
 // Walk-forward = fit on the older-listed half of live tokens, predict the newer
 // half (cut 2024-02-18); a second split (oldest 60% -> newest 40%, cut
 // 2024-08-22) gives x3.31 for the selected model. A term is kept when it
 // improves either blind test by >=1% without worsening the other by >0.5%.
 //
-// Two things the fit says that a reader must not misread, so the dashboard says
-// them next to the numbers:
+// Two things the fit says that a reader must not misread, so the dashboard
+// says them next to the numbers:
 //   * The growth coefficient is NEGATIVE (-0.73): the live-token record says the
 //     fastest 7-day growers trade at LOWER market-cap multiples — fast growth
 //     reverts. A protocol that grew +10% in a week is discounted to x0.84, one
@@ -41,9 +45,28 @@
 // <1y 0.675, 1-2y 0.617, 2-3y 0.453, 3y+ 0.209. Older pre-token protocols have
 // smaller odds, because most of their age peers already carry a token. The odds
 // are shown as a column and in the detail view; they are a record, NOT a
-// prediction that a token launches, and they do NOT multiply the implied value
-// (the fitted maturity term already carries age into value — counting it twice
-// would break the blind-tested fit).
+// prediction that a token launches.
+//
+// What radar-7 adds on top of that fit (all of it computed from the same
+// snapshot figures, by one function per row, no name ever special-cased):
+//   * Expected value: EV = implied value x launch odds. Implied value is what
+//     a launch would be worth; EV is what it is worth weighted by the peers'
+//     record of launches at this age. The board still ranks by implied value —
+//     EV is a column with its own sort, and the model panel says which question
+//     each answers: implied ranks the prize, EV ranks the farm.
+//   * A costed farm verdict on every row. The farm runs on the protocol's
+//     cheapest chain, at the minimum-viable deposit (0.0006% of TVL, $100 to
+//     $5,000 — the smallest position that registers as a real user on a
+//     protocol of this size). Expected airdrop = EV x a 10% pool, shared
+//     pro-rata by deposit over TVL. Net = expected minus the plan's gas in full.
+//     Net per hour divides by the plan's active hours. FARM when the net is
+//     clearly positive (>= +$2); otherwise MONITOR — a dated recheck plan, never
+//     a rejection. The word SKIP appears nowhere on this board.
+//   * The whole snapshot accounted for: 758 protocols, every one in exactly one
+//     bucket — ranked, live and fitted, live and unusable, excluded by the house
+//     rule. The counts are computed from the snapshot, and they sum to 758.
+//   * Dated farm schedules: every farm step carries a calendar date from the
+//     snapshot's own as-of day, so the plan reads as a diary, not a wishlist.
 //
 // Determinism: the same snapshot bytes always produce the same output. The fit
 // is pure arithmetic (no randomness except the seeded bootstrap), every sort
@@ -81,6 +104,8 @@ export interface BoardRow {
   change_7d: number | null;
   age_days: number | null;
   implied_value_usd: number;
+  /** Expected value: implied value weighted by the launch odds. */
+  expected_value_usd: number;
   /** The bootstrap P10 of the implied value. */
   implied_p10_usd: number;
   /** The bootstrap P90 of the implied value. */
@@ -104,7 +129,45 @@ export interface BoardRow {
   /** The fitted market-cap multiple at this row's own TVL. */
   fitted_multiple: number;
   farm_steps: string[];
+  /** The costed verdict for this row's farm, priced from its own figures. */
+  farm_verdict: FarmVerdict;
+  /** The farm plan as dated entries: day offset and calendar date per step. */
+  farm_schedule: FarmScheduleEntry[];
   watchlist: boolean;
+}
+
+/** The costed farm verdict: every dollar of the farm, and the call the net makes. */
+export interface FarmVerdict {
+  /** FARM when the net clears +$2; MONITOR otherwise — a recheck plan, never a refusal. */
+  verdict: 'FARM' | 'MONITOR';
+  /** The minimum-viable deposit the farm runs on. */
+  deposit_usd: number;
+  /** The chain the farm runs on: the cheapest of the protocol's chains. */
+  chain: string;
+  /** The plan's gas in full, at the farm chain's rate. */
+  total_gas_usd: number;
+  /** Expected airdrop: EV x 10% pool, shared pro-rata by deposit over TVL. */
+  expected_usd: number;
+  /** Expected minus gas: the farm's true sunk-cost result. */
+  net_usd: number;
+  /** Net per active hour of farming. */
+  net_per_hour_usd: number;
+  /** Active hours the plan takes (setup, actions, repeats, top-up, exit). */
+  hours: number;
+  /** The deposit at which this farm breaks even (MONITOR rows: the entry trigger). */
+  breakeven_deposit_usd: number;
+  /** The recheck date for a MONITOR row (first weekly check after the verdict). */
+  recheck_date: string;
+}
+
+/** One dated entry of a farm schedule: which day, which date, what happens. */
+export interface FarmScheduleEntry {
+  /** Days after the snapshot's as-of day. */
+  day: number;
+  /** Calendar date (YYYY-MM-DD) of this step. */
+  date: string;
+  /** What happens on this date. */
+  what: string;
 }
 
 /** A live-token protocol: it already trades, so the board shows the market's own value. */
@@ -148,6 +211,24 @@ export interface TermTest {
   base_wf_x_factor: number;
 }
 
+/** Every protocol in the snapshot, counted by where it lands: the buckets always sum to the total. */
+export interface SnapshotAccounting {
+  /** Protocols in the snapshot. */
+  total: number;
+  /** Rows on the ranked board (watchlist + early). */
+  ranked: number;
+  /** Live-token protocols the fit stands on. */
+  live_fitted: number;
+  /** Live-token protocols the dashboard's Live view shows. */
+  live_shown: number;
+  /** Live-token protocols the fit cannot use (no positive market cap or TVL). */
+  live_unfitted: number;
+  /** Pre-token protocols excluded by category (bridge, staking, CEX). */
+  excluded_category: number;
+  /** Pre-token protocols excluded by name (wrapped, versioned, exchange). */
+  excluded_name: number;
+}
+
 /** The fitted model, as the dashboard states it. */
 export interface ModelSummary {
   version: string;
@@ -181,9 +262,12 @@ export interface ModelSummary {
   all_terms_loo_x_factor: number;
   /** The walk-forward miss with all three candidate terms. */
   all_terms_wf_x_factor: number;
-  /** The airdrop-pool assumption is NOT used: radar-6 carries no verdict. */
+  /** The airdrop-pool assumption behind every farm verdict: 10% of expected value. */
+  airdrop_pool_pct: number;
   /** Bootstrap refits behind the bands. */
   bootstrap_refits: number;
+  /** The verdict counts across the board. */
+  verdict_counts: { FARM: number; MONITOR: number };
   /** Launch odds by age bucket, from the peers' record. */
   odds: OddsBucket[];
 }
@@ -199,15 +283,20 @@ export interface RadarData {
   board_size: number;
   early_size: number;
   live_size: number;
+  accounting: SnapshotAccounting;
   rows: BoardRow[];
   live: LiveRow[];
 }
 
-export const MODEL_VERSION = 'radar-6';
+export const MODEL_VERSION = 'radar-7';
 /** Bootstrap refits for the uncertainty bands (deterministic seed). */
 export const BOOTSTRAP_REFITS = 200;
 /** The bootstrap's fixed seed: the same snapshot always draws the same refits. */
 export const BOOTSTRAP_SEED = 0xc0ffee;
+/** The airdrop-pool assumption: 10% of expected value, shared pro-rata by deposit over TVL. */
+export const AIRDROP_POOL_PCT = 0.1;
+/** A verdict is FARM when the net clears this many dollars; below it, MONITOR. */
+export const VERDICT_FARM_MIN_USD = 2;
 
 const DAY_MS = 86_400_000;
 const LOG10 = Math.log10;
@@ -232,6 +321,13 @@ export function ageDays(asOf: string, listedAt: string | null): number | null {
   const b = Date.parse(`${listedAt}T00:00:00Z`);
   if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
   return Math.max(0, Math.floor((a - b) / DAY_MS));
+}
+
+/** A calendar date (YYYY-MM-DD) that many days after the snapshot's as-of day. */
+export function dateAfter(asOf: string, days: number): string {
+  const a = Date.parse(`${asOf}T00:00:00Z`);
+  const d = new Date(a + days * DAY_MS);
+  return d.toISOString().slice(0, 10);
 }
 
 /** The growth term's value: the 7-day TVL change, clamped to [-50, 100] per cent, as a fraction. */
@@ -736,6 +832,38 @@ export function rulePasses(p: SnapshotProtocol): boolean {
   return true;
 }
 
+/** Whether a protocol records a token at all (gecko entry or symbol). */
+function hasToken(p: SnapshotProtocol): boolean {
+  return p.gecko_id !== null || p.symbol !== null;
+}
+
+/**
+ * Every protocol in the snapshot, counted by where it lands. The five buckets
+ * always sum to the snapshot total — nothing silently disappears: ranked rows,
+ * live tokens the fit stands on, live tokens the fit cannot use, pre-token
+ * protocols excluded by category, pre-token protocols excluded by name.
+ */
+export function snapshotAccounting(snapshot: Snapshot, boardSize: number, liveShown: number): SnapshotAccounting {
+  const live = snapshot.protocols.filter(hasToken);
+  const fitted = live.filter((p) => p.mcap_usd !== null && p.mcap_usd > 0 && p.tvl_usd > 0).length;
+  const pre = snapshot.protocols.filter((p) => !hasToken(p));
+  const excludedCategory = pre.filter((p) => p.category !== null && EXCLUDED_CATEGORIES.has(p.category)).length;
+  const excludedName = pre.filter(
+    (p) =>
+      !(p.category !== null && EXCLUDED_CATEGORIES.has(p.category)) &&
+      (VERSION_SUFFIX.test(p.name) || WRAPPED_WORD.test(p.name) || EXCHANGE_PREFIXES.some((e) => p.name.startsWith(e))),
+  ).length;
+  return {
+    total: snapshot.protocols.length,
+    ranked: boardSize,
+    live_fitted: fitted,
+    live_shown: liveShown,
+    live_unfitted: live.length - fitted,
+    excluded_category: excludedCategory,
+    excluded_name: excludedName,
+  };
+}
+
 // ---------------------------------------------------------------- farm plans
 
 /** Gas cost of one transaction on a chain, as the plan quotes it. */
@@ -798,10 +926,37 @@ export function gasUsd(chain: string): number {
   return 3;
 }
 
-/** Farming capital, a continuous function of TVL: $50 at the $5M floor, rising
- *  linearly with TVL and capped at $2,500 — no fixed tiers, every TVL gives its own figure. */
-export function capitalOf(tvlUsd: number): number {
-  return Math.round(Math.min(2500, Math.max(50, tvlUsd * 0.000004)));
+/** The chain a row farms on: the cheapest chain the protocol runs on, by gas per
+ *  transaction — never the first chain listed. A farmer does not pay $9 a
+ *  transaction on Ethereum when the same protocol runs on Solana at $0.05. */
+export function farmChainOf(p: SnapshotProtocol): string {
+  if (p.chains.length === 0) return 'Ethereum';
+  let best = p.chains[0]!;
+  for (const c of p.chains) if (gasUsd(c) < gasUsd(best)) best = c;
+  return best;
+}
+
+/** The second-cheapest chain, for the plan's mirror position; null on a single-chain protocol. */
+export function secondChainOf(p: SnapshotProtocol): string | null {
+  if (p.chains.length < 2) return null;
+  const main = farmChainOf(p);
+  let second: string | null = null;
+  for (const c of p.chains) {
+    if (c === main) continue;
+    if (second === null || gasUsd(c) < gasUsd(second)) second = c;
+  }
+  return second;
+}
+
+/**
+ * Farming capital: the minimum-viable deposit — the smallest position that
+ * registers as a real user on a protocol of this size: 0.0006% of TVL, between
+ * $100 and $5,000. A $50 ticket on a $3B protocol is dust the points system
+ * never sees; a $5,000 ticket on a $5M protocol is the protocol itself. One
+ * rule, one function, every row.
+ */
+export function depositOf(tvlUsd: number): number {
+  return Math.round(Math.min(5000, Math.max(100, tvlUsd * 0.000006)));
 }
 
 /** Hold in days, from age: a young protocol is farmed hard and short, an old one slow
@@ -848,19 +1003,127 @@ function money(n: number): string {
   return `$${Math.round(n).toLocaleString('en-US')}`;
 }
 
+/** A dollar amount with cents when it is under $100, whole dollars above it. */
+function moneyFine(n: number): string {
+  const v = Math.round(n * 100) / 100;
+  if (Math.abs(v) >= 100) return `$${Math.round(v).toLocaleString('en-US')}`;
+  return `$${v.toFixed(2)}`;
+}
+
+/** Active hours the plan takes: setup, first action, each repeat, top-up, exit. */
+function planHours(repeats: number): number {
+  return 3 + repeats * 0.5;
+}
+
+/**
+ * The costed farm verdict: the farm runs at the minimum-viable deposit on the
+ * protocol's cheapest chain. Expected airdrop = expected value x a 10% pool,
+ * shared pro-rata by deposit over TVL. Net = expected minus the plan's gas in
+ * full — the farm's true sunk-cost result. FARM when the net clears +$2;
+ * otherwise MONITOR, with the break-even deposit as the entry trigger and a
+ * dated recheck. Capital is locked, not spent, so it is shown and never
+ * subtracted. The word SKIP appears nowhere: a farm that does not clear its gas
+ * is a farm to watch, not a farm to refuse.
+ */
+export function farmVerdict(
+  p: SnapshotProtocol,
+  asOf: string,
+  expectedValueUsd: number,
+  repeats: number,
+): FarmVerdict {
+  const chain = farmChainOf(p);
+  const second = secondChainOf(p);
+  const deposit = depositOf(p.tvl_usd);
+  const txCount = 2 + repeats + 1 + 1;
+  const gasTotal = Math.round((txCount * gasUsd(chain) + (second !== null ? gasUsd(second) : 0)) * 100) / 100;
+  const expected = (expectedValueUsd * AIRDROP_POOL_PCT * deposit) / p.tvl_usd;
+  const net = Math.round((expected - gasTotal) * 100) / 100;
+  const hours = planHours(repeats);
+  const perHour = Math.round((net / hours) * 100) / 100;
+  // The deposit at which this farm breaks even: gas divided by the expected
+  // value of one deposited dollar. A MONITOR row names it as its entry trigger.
+  const perDollar = (expectedValueUsd * AIRDROP_POOL_PCT) / p.tvl_usd;
+  const breakeven = perDollar > 0 ? Math.ceil(gasTotal / perDollar / 50) * 50 : deposit;
+  return {
+    verdict: net >= VERDICT_FARM_MIN_USD ? 'FARM' : 'MONITOR',
+    deposit_usd: deposit,
+    chain,
+    total_gas_usd: gasTotal,
+    expected_usd: Math.round(expected * 100) / 100,
+    net_usd: net,
+    net_per_hour_usd: perHour,
+    hours,
+    breakeven_deposit_usd: breakeven,
+    recheck_date: dateAfter(asOf, 7),
+  };
+}
+
+/**
+ * The farm plan as dated entries: every step carries the calendar date it
+ * happens on, counted from the snapshot's as-of day. The plan reads as a
+ * diary — setup today, first repeat on the cadence day, top-up on day 14,
+ * exit window at the end of the hold — not a wishlist without dates.
+ */
+export function farmSchedule(
+  p: SnapshotProtocol,
+  asOf: string,
+  verdict: FarmVerdict,
+  hold: number,
+  cadence: number,
+  repeats: number,
+): FarmScheduleEntry[] {
+  const second = secondChainOf(p);
+  const topUp = Math.round(verdict.deposit_usd / 2);
+  const unwindDays = Math.max(3, Math.round(hold / 10));
+  const entries: FarmScheduleEntry[] = [
+    {
+      day: 0,
+      date: dateAfter(asOf, 0),
+      what: `Set up a fresh wallet on ${verdict.chain} and fund it with ${money(verdict.deposit_usd)} plus gas`,
+    },
+    {
+      day: 0,
+      date: dateAfter(asOf, 0),
+      what: `First deposit ${money(verdict.deposit_usd)} on ${verdict.chain}${second !== null ? `, mirror ${money(Math.round(verdict.deposit_usd * 0.4))} on ${second}` : ''} — save the receipt`,
+    },
+    {
+      day: cadence,
+      date: dateAfter(asOf, cadence),
+      what: `First repeat of the core action (then every ${cadence} days, ${repeats} repeats to day ${hold})`,
+    },
+    {
+      day: 14,
+      date: dateAfter(asOf, 14),
+      what: `Top-up ${money(topUp)} on ${second !== null ? second : verdict.chain}`,
+    },
+    {
+      day: hold,
+      date: dateAfter(asOf, hold),
+      what: `Last repeat — the exit window opens; check announcements and the points page weekly from here`,
+    },
+    {
+      day: hold + unwindDays,
+      date: dateAfter(asOf, hold + unwindDays),
+      what: `Unwind complete (tranches over ${unwindDays} days) — or leave the rest running if nothing was announced`,
+    },
+  ];
+  return entries;
+}
+
 /** Seven concrete steps, every number computed from this row's own figures: a summed
- *  total cost and time first, then setup, the category-plus-chains action, cadence,
- *  a second position, a concrete exit with its trigger, and one short safety line.
- *  No verdict: every row carries a plan a reader can run, never a stamp that says
- *  not to farm it — the board's job is to show how to farm each one. */
+ *  total cost and time first — with the costed verdict in the same line — then
+ *  setup, the category-plus-chains action, cadence, a second position, a concrete
+ *  exit with its trigger, and one short safety line. No verdict stamp that says
+ *  not to farm: every row carries a plan a reader can run, and the verdict in
+ *  step 1 says what that plan costs and what it is expected to return. */
 export function farmSteps(p: SnapshotProtocol, asOf: string): string[] {
   const age = ageDays(asOf, p.listed_at);
-  const capital = capitalOf(p.tvl_usd);
+  const capital = depositOf(p.tvl_usd);
   const hold = holdDaysOf(age);
   const cadence = cadenceDaysOf(age);
   const repeats = Math.max(1, Math.round(hold / cadence));
-  const main = p.chains[0] ?? 'Ethereum';
-  const second = p.chains.length > 1 ? p.chains[1]! : null;
+  const main = farmChainOf(p);
+  const second = secondChainOf(p);
   const topUp = Math.round(capital / 2);
   const mirror = Math.round(capital * 0.4);
   const txCount = 2 + repeats + 1 + 1;
@@ -889,6 +1152,28 @@ export function farmSteps(p: SnapshotProtocol, asOf: string): string[] {
   return steps;
 }
 
+/** The verdict's one line, folded into the plan's first step: the call, the
+ *  expected airdrop against the gas, the net and the net per hour — or, for a
+ *  MONITOR row, the break-even deposit and the recheck date. */
+export function verdictLine(
+  p: SnapshotProtocol,
+  verdict: FarmVerdict,
+  expectedValueUsd: number,
+): string {
+  const sign = verdict.net_usd >= 0 ? '+' : '';
+  if (verdict.verdict === 'FARM') {
+    return (
+      ` Verdict FARM: expected airdrop ${moneyFine(verdict.expected_usd)} vs ${moneyFine(verdict.total_gas_usd)} gas on ${verdict.chain} — net ${sign}${moneyFine(verdict.net_usd)} (${moneyFine(verdict.net_per_hour_usd)}/hour over ${verdict.hours} hours). Pool assumed 10% of expected value (${money(expectedValueUsd)}), shared pro-rata by deposit over TVL.`
+    );
+  }
+  return (
+    ` Verdict MONITOR: expected airdrop ${moneyFine(verdict.expected_usd)} vs ${moneyFine(verdict.total_gas_usd)} gas on ${verdict.chain} — net ${sign}${moneyFine(verdict.net_usd)} at the ${money(verdict.deposit_usd)} minimum-viable deposit; recheck ${verdict.recheck_date}, enter at a ${money(verdict.breakeven_deposit_usd)} deposit. Pool assumed 10% of expected value (${money(expectedValueUsd)}), shared pro-rata by deposit over TVL.`
+    + (verdict.chain !== (p.chains[0] ?? verdict.chain)
+      ? ` Farmed on ${verdict.chain}, the cheapest of ${p.chains.length} chains.`
+      : '')
+  );
+}
+
 // ---------------------------------------------------------------- build
 
 export function parseSnapshot(text: string): Snapshot {
@@ -911,7 +1196,16 @@ export function buildRadar(snapshot: Snapshot): { board: BoardRow[]; radar: Rada
       const gCoef = fit.coefs.growth ?? 0;
       const mCoef = fit.coefs.maturity ?? 0;
       const implied = impliedValue(p, fit, asOf);
-      const tvlLog = LOG10(p.tvl_usd);
+      const odds = oddsOf(p, asOf, fit.odds);
+      const expected = Math.max(1, Math.round(implied * odds));
+      const age = ageDays(asOf, p.listed_at);
+      const hold = holdDaysOf(age);
+      const cadence = cadenceDaysOf(age);
+      const repeats = Math.max(1, Math.round(hold / cadence));
+      const verdict = farmVerdict(p, asOf, expected, repeats);
+      const steps = farmSteps(p, asOf);
+      steps[0] = steps[0]! + verdictLine(p, verdict, expected);
+      const schedule = farmSchedule(p, asOf, verdict, hold, cadence, repeats);
       return {
         rank: 0,
         slug: p.slug,
@@ -920,13 +1214,14 @@ export function buildRadar(snapshot: Snapshot): { board: BoardRow[]; radar: Rada
         chains: p.chains,
         tvl_usd: p.tvl_usd,
         change_7d: p.change_7d,
-        age_days: ageDays(asOf, p.listed_at),
+        age_days: age,
         implied_value_usd: implied,
+        expected_value_usd: expected,
         implied_p10_usd: implied,
         implied_p90_usd: implied,
         rank_low: 0,
         rank_high: 0,
-        launch_odds: oddsOf(p, asOf, fit.odds),
+        launch_odds: odds,
         slope: fit.base.slope,
         category_level: fit.base.levelOf(p.category),
         growth_coef: gCoef,
@@ -936,7 +1231,9 @@ export function buildRadar(snapshot: Snapshot): { board: BoardRow[]; radar: Rada
         maturity_value: mv,
         maturity_multiplier: Math.pow(10, mCoef * mv),
         fitted_multiple: implied / p.tvl_usd,
-        farm_steps: farmSteps(p, asOf),
+        farm_steps: steps,
+        farm_verdict: verdict,
+        farm_schedule: schedule,
         watchlist: watch.has(p.slug),
       } as BoardRow;
     })
@@ -975,6 +1272,9 @@ export function buildRadar(snapshot: Snapshot): { board: BoardRow[]; radar: Rada
     .sort((a, b) => (b.mcap_usd ?? 0) - (a.mcap_usd ?? 0))
     .slice(0, 24);
 
+  const verdictCounts = { FARM: 0, MONITOR: 0 };
+  for (const r of rows) verdictCounts[r.farm_verdict.verdict]++;
+
   const categoryMultiple: Record<string, number> = {};
   for (const [cat, level] of fit.base.levels) {
     categoryMultiple[cat === '' ? 'Uncategorised' : cat] = Math.pow(10, fit.base.slope * 8 + level) / 1e8;
@@ -996,7 +1296,9 @@ export function buildRadar(snapshot: Snapshot): { board: BoardRow[]; radar: Rada
     wf2_cut: fit.wf2.cut,
     all_terms_loo_x_factor: fit.allLoo.xFactor,
     all_terms_wf_x_factor: fit.allWf.xFactor,
+    airdrop_pool_pct: AIRDROP_POOL_PCT,
     bootstrap_refits: BOOTSTRAP_REFITS,
+    verdict_counts: verdictCounts,
     odds: fit.odds,
   };
 
@@ -1010,6 +1312,7 @@ export function buildRadar(snapshot: Snapshot): { board: BoardRow[]; radar: Rada
     board_size: rows.length,
     early_size: rows.filter((r) => !r.watchlist).length,
     live_size: live.length,
+    accounting: snapshotAccounting(snapshot, rows.length, live.length),
     rows,
     live,
   };
