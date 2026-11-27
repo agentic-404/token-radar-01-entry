@@ -1,8 +1,11 @@
-// Token Radar — entrypoint (radar-6).
+// Token Radar — entrypoint (radar-7).
 //
 // Reads the sealed DefiLlama snapshot, ranks the pre-token protocols with the
-// fitted radar-6 model, and writes the board, the dashboard data, the dossier
-// and the dashboard's static files into the output directory.
+// fitted radar-7 model (radar-6's fit, unchanged), and writes the board, the
+// dashboard data, the dossier and the dashboard's static files into the output
+// directory. radar-7 adds, on the same fit: a costed farm verdict in dollars
+// per hour on every row, an expected-value column, the whole 758 protocols
+// accounted for, and dated farm schedules.
 //
 // Local run (the way the kit shows it):
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input <snapshot.json>
@@ -51,6 +54,7 @@ function copyTree(from: string, to: string): void {
 
 function summarise(snapshot: Snapshot, radar: RadarData, rows: number): void {
   const m = radar.model;
+  const a = radar.accounting;
   console.log(
     `token radar: ${snapshot.protocols.length} protocols in the snapshot, ` +
       `${snapshot.watchlist.length} on the watchlist, ${rows} rows ranked ` +
@@ -61,6 +65,11 @@ function summarise(snapshot: Snapshot, radar: RadarData, rows: number): void {
       `leave-one-out miss x${m.loo_x_factor.toFixed(2)}, ` +
       `walk-forward x${m.wf_x_factor.toFixed(2)} (cut ${m.wf_cut}) ` +
       `/ x${m.wf2_x_factor.toFixed(2)} (cut ${m.wf2_cut})`,
+  );
+  console.log(
+    `token radar: verdicts ${m.verdict_counts.FARM} FARM / ${m.verdict_counts.MONITOR} MONITOR, ` +
+      `accounted ${a.ranked} ranked + ${a.live_fitted} live fitted + ${a.live_unfitted} live unusable ` +
+      `+ ${a.excluded_category + a.excluded_name} excluded = ${a.total} of ${a.total}`,
   );
 }
 
