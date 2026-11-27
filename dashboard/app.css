@@ -1,7 +1,9 @@
-/* Token Radar — dashboard stylesheet (radar-6).
+/* Token Radar — dashboard stylesheet (radar-7).
    Dark navy page, amber for the radar's name and the ranks, mint for values
    and the active tab, rose for a falling 7-day move. app.js builds every
-   element into #app; this sheet only dresses what it builds. */
+   element into #app; this sheet only dresses what it builds.
+   radar-7 adds: verdict chips (FARM mint, MONITOR amber), the expected-value
+   column, the accounting line, and the dated schedule table. */
 
 :root {
   --bg: #0a0e20;
@@ -97,7 +99,7 @@ h3 {
   font-size: 13.5px;
   line-height: 1.65;
   color: var(--ink-soft);
-  margin-bottom: 22px;
+  margin-bottom: 10px;
 }
 
 .strip b { color: #fff; }
@@ -108,6 +110,19 @@ h3 {
 }
 
 .ok { color: var(--mint); font-weight: 700; }
+
+.accounting {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+  margin-bottom: 22px;
+}
+
+.accounting b { color: #fff; }
 
 /* ---- top five ----------------------------------------------------------- */
 
@@ -148,6 +163,28 @@ h3 {
 
 .tv, .od { font-size: 13px; color: var(--mut); margin-top: 4px; }
 .tv b, .od b { color: #dbe4ff; }
+
+.vd { font-size: 13px; margin-top: 6px; }
+.vd b { color: #dbe4ff; }
+
+/* ---- verdict chips ------------------------------------------------------ */
+
+.chip {
+  display: inline-block;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line);
+  vertical-align: 1px;
+}
+
+.chip.farm { border-color: #1f7a4d; color: #7ce3a8; }
+.chip.monitor { border-color: #8a6d1f; color: #f0c95c; }
+
+.vnet { font-size: 12.5px; color: var(--ink-soft); white-space: nowrap; }
+.vnet b { color: #fff; }
 
 /* ---- tabs and filters --------------------------------------------------- */
 
@@ -369,6 +406,39 @@ dl.kv dd { margin: 0; text-align: right; color: #fff; }
   line-height: 1.55;
   margin-bottom: 16px;
 }
+
+.verdictbox {
+  background: var(--panel-deep);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  margin-bottom: 16px;
+}
+
+.verdictbox b { color: #fff; }
+
+table.sched { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+
+table.sched th {
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7d8ab5;
+  font-weight: 700;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+table.sched td {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+}
+
+table.sched td:first-child { white-space: nowrap; color: var(--gold); font-weight: 600; padding-right: 12px; }
 
 .slider-row {
   display: flex;
